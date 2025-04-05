@@ -1,0 +1,12 @@
+# Prevent uploading large unnecessary files
+node_modules
+preview/
+.vscode
+.git
+.gitignore
+*.log
+.DS_Store
+test/
+debug/
+*.zip
+*.tar.gz
