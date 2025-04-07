@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Calendar } from 'react-native-calendars';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { scheduleNotification } from '../../utils/notificationHelper';
 
 export default function TaskScreen() {
@@ -23,6 +24,36 @@ export default function TaskScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
   const [editingId, setEditingId] = useState(null);
+
+  const TASKS_KEY = '@tasks';
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  useEffect(() => {
+    saveTasks(tasks);
+  }, [tasks]);
+
+  const saveTasks = async (tasksToSave) => {
+    try {
+      const jsonValue = JSON.stringify(tasksToSave);
+      await AsyncStorage.setItem(TASKS_KEY, jsonValue);
+    } catch (e) {
+      console.error('Error saving tasks:', e);
+    }
+  };
+
+  const loadTasks = async () => {
+    try {
+      const jsonValue = await AsyncStorage.getItem(TASKS_KEY);
+      if (jsonValue != null) {
+        setTasks(JSON.parse(jsonValue));
+      }
+    } catch (e) {
+      console.error('Error loading tasks:', e);
+    }
+  };
 
   const handleAddTask = async () => {
     if (!task) {
@@ -35,7 +66,8 @@ export default function TaskScreen() {
       return;
     }
 
-    const dateTime = new Date(`${selectedDate}T${selectedTime.toTimeString()}`);
+    const formattedTime = selectedTime.toTimeString().slice(0, 5); // "HH:mm"
+    const dateTime = new Date(`${selectedDate}T${formattedTime}`);
 
     if (editingId) {
       const updated = tasks.map((item) =>
@@ -44,7 +76,7 @@ export default function TaskScreen() {
               ...item,
               text: task,
               date: selectedDate,
-              time: selectedTime.toLocaleTimeString(),
+              time: formattedTime,
             }
           : item
       );
@@ -55,7 +87,7 @@ export default function TaskScreen() {
         id: Date.now().toString(),
         text: task,
         date: selectedDate,
-        time: selectedTime.toLocaleTimeString(),
+        time: formattedTime,
       };
       setTasks([...tasks, newTask]);
       await scheduleNotification('Reminder', `Task: ${task}`, dateTime);
@@ -90,7 +122,10 @@ export default function TaskScreen() {
       { text: 'Cancel' },
       {
         text: 'Delete',
-        onPress: () => setTasks(tasks.filter((item) => item.id !== id)),
+        onPress: () => {
+          const updatedTasks = tasks.filter((item) => item.id !== id);
+          setTasks(updatedTasks);
+        },
         style: 'destructive',
       },
     ]);
@@ -118,7 +153,9 @@ export default function TaskScreen() {
         />
 
         <TouchableOpacity style={styles.timeButton} onPress={() => setShowPicker(true)}>
-          <Text style={styles.timeText}>Select Time: {selectedTime.toLocaleTimeString()}</Text>
+          <Text style={styles.timeText}>
+            Select Time: {selectedTime.toTimeString().slice(0, 5)}
+          </Text>
         </TouchableOpacity>
 
         {showPicker && (
@@ -133,8 +170,15 @@ export default function TaskScreen() {
         <Button title={editingId ? 'Update Task' : 'Add Task'} onPress={handleAddTask} />
 
         <FlatList
-          data={tasks}
+          data={tasks.filter((item) => item.date === selectedDate)}
           keyExtractor={(item) => item.id}
+          ListEmptyComponent={
+            selectedDate ? (
+              <Text style={{ textAlign: 'center', marginTop: 10, color: '#999' }}>
+                No tasks for this date.
+              </Text>
+            ) : null
+          }
           renderItem={({ item }) => (
             <View style={styles.taskItem}>
               <Text style={styles.taskText}>{item.text}</Text>

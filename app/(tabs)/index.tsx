@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
+  TouchableOpacity, 
   ScrollView,
   SafeAreaView,
   StatusBar,
@@ -12,23 +12,51 @@ import {
 import { useRouter, useNavigation } from 'expo-router';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 export default function DashboardScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-
   const [shouldAnimate, setShouldAnimate] = useState(true);
+  const [upcomingTasks, setUpcomingTasks] = useState([]);
 
-  // Listen to focus on tab screen
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      // Reset animation trigger on focus
       setShouldAnimate(false);
       setTimeout(() => setShouldAnimate(true), 20);
+      fetchUpcomingTasks(); // refresh on focus
     });
 
     return unsubscribe;
   }, [navigation]);
+
+  const fetchUpcomingTasks = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@tasks');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+
+        const now = new Date();
+        const futureTasks = parsed
+          .map((task) => {
+            const dateTime = new Date(`${task.date} ${task.time}`);
+            return { ...task, dateTime };
+          })
+          .filter((t) => t.dateTime > now)
+          .sort((a, b) => a.dateTime - b.dateTime)
+          .slice(0, 3);
+
+        setUpcomingTasks(futureTasks);
+      }
+    } catch (e) {
+      console.error('Error loading tasks:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchUpcomingTasks();
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -106,10 +134,33 @@ export default function DashboardScreen() {
             <Text style={styles.summaryText}>🔔 2 Notifications set</Text>
           </View>
         </MotiView>
+
+        {/* Upcoming Tasks */}
+        <MotiView
+          from={shouldAnimate ? { opacity: 0, translateY: 20 } : undefined}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ delay: 1000, type: 'timing' }}
+          style={styles.section}
+        >
+          <Text style={styles.sectionTitle}>⏳ Upcoming Tasks</Text>
+          {upcomingTasks.length === 0 ? (
+            <Text style={{ color: '#777', marginTop: 10 }}>No upcoming tasks.</Text>
+          ) : (
+            upcomingTasks.map((task) => (
+              <View key={task.id} style={styles.summaryCard}>
+                <Text style={styles.summaryText}>📝 {task.text}</Text>
+                <Text style={styles.summaryText}>
+                  📅 {task.date} | 🕒 {task.time}
+                </Text>
+              </View>
+            ))
+          )}
+        </MotiView>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safeArea: {

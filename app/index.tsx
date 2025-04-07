@@ -8,19 +8,14 @@ export default function SplashScreen() {
     const timeout = setTimeout(() => {
       // ✅ Correct redirect path using typed route
       router.replace('/(tabs)');
-    }, 2500);
+    }, 0);
 
     return () => clearTimeout(timeout);
   }, []);
 
   return (
     <View style={styles.container}>
-      <Image
-        source={require('../assets/images/logo.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
-      <Text style={styles.text}>Welcome to NeXs</Text>
+      {/* <Text style={styles.text}>Welcome to NeXs</Text> */}
     </View>
   );
 }

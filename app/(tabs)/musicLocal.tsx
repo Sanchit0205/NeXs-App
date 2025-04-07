@@ -1,205 +1,431 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity} from 'react-native';
-import { Audio } from 'expo-av';
-import { Ionicons } from '@expo/vector-icons';
-import AnimatedPlayPauseButton from '../../components/ui/AnimatedPlayPauseButton';
+// app/(tabs)/music.tsx
+
+import React, { useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Modal,
+  TextInput,
+  Platform,
+} from "react-native";
+import { Audio } from "expo-av";
+import { Ionicons } from "@expo/vector-icons";
+import Slider from "@react-native-community/slider";
+import * as DocumentPicker from "expo-document-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 
-const playlist = [
-    {
-      title: 'Lofi Chill',
-      uri: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=80',
-    },
-    {
-      title: 'Chill Vibes',
-      uri: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-      cover: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=500&q=80',
-    },
-    {
-      title: 'Smooth Jazz',
-      uri: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-      cover: 'https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?auto=format&fit=crop&w=500&q=80',
-    },
-  ];
-  
-  
 
 export default function MusicScreen() {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [playlists, setPlaylists] = useState<{ [key: string]: any[] }>({});
+  const [currentPlaylist, setCurrentPlaylist] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [playMode, setPlayMode] = useState<'normal' | 'loop' | 'shuffle'>('normal');
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [position, setPosition] = useState(0);
+  const positionInterval = useRef<NodeJS.Timeout | null>(null);
 
-  
-  const loadAndPlay = async (index) => {
-    try {
-      if (sound) await sound.unloadAsync();
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: playlist[index].uri },
-        { shouldPlay: true }
-      );
-      setSound(newSound);
-      setIsPlaying(true);
-    } catch (error) {
-      console.error('Audio load error:', error);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+
+  const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+  const [removeTrackIndex, setRemoveTrackIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    loadPlaylists();
+    return () => {
+      if (sound) sound.unloadAsync();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentPlaylist && playlists[currentPlaylist]) {
+      playSong(playlists[currentPlaylist][currentTrackIndex]);
+    }
+  }, [currentTrackIndex, currentPlaylist]);
+
+  const loadPlaylists = async () => {
+    const stored = await AsyncStorage.getItem("playlists");
+    if (stored) setPlaylists(JSON.parse(stored));
+  };
+
+  const savePlaylists = async (newPlaylists: any) => {
+    await AsyncStorage.setItem("playlists", JSON.stringify(newPlaylists));
+  };
+
+  const pickSong = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: "audio/*" });
+    if (result.assets && result.assets.length > 0 && currentPlaylist) {
+      const updated = {
+        ...playlists,
+        [currentPlaylist]: [...(playlists[currentPlaylist] || []), result.assets[0]],
+      };
+      setPlaylists(updated);
+      savePlaylists(updated);
     }
   };
-  
-  
-  useEffect(() => {
-    (async () => {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-      });
-    })();
-  }, []);
-  
-  useEffect(() => {
-    loadAndPlay(currentTrackIndex);
-  
-    return () => {
-      if (sound) {
-        sound.unloadAsync(); // ✅ Prevent memory leak
+
+  const createPlaylist = () => {
+    const name = `Playlist-${Object.keys(playlists).length + 1}`;
+    const updated = { ...playlists, [name]: [] };
+    setPlaylists(updated);
+    setCurrentPlaylist(name);
+    savePlaylists(updated);
+  };
+
+  const playSong = async (track: any) => {
+    if (!track || !track.uri) return;
+
+    if (sound) {
+      await sound.unloadAsync();
+    }
+
+    const { sound: newSound } = await Audio.Sound.createAsync({ uri: track.uri });
+    setSound(newSound);
+    await newSound.playAsync();
+    setIsPlaying(true);
+
+    const status = await newSound.getStatusAsync();
+    setDuration(status.durationMillis || 0);
+
+    if (positionInterval.current) clearInterval(positionInterval.current);
+    positionInterval.current = setInterval(async () => {
+      const pos = await newSound.getStatusAsync();
+      if (pos.isLoaded) {
+        setPosition(pos.positionMillis || 0);
       }
-    };
-  }, [currentTrackIndex]);  
-  
+    }, 500);
+  };
 
-  const togglePlayback = async () => {
+  const togglePlayPause = async () => {
     if (!sound) return;
-
-    if (isPlaying) {
+    const status = await sound.getStatusAsync();
+    if (status.isPlaying) {
       await sound.pauseAsync();
+      setIsPlaying(false);
     } else {
       await sound.playAsync();
+      setIsPlaying(true);
+    }
+  };
+
+  const skipTrack = (forward = true) => {
+    const tracks = playlists[currentPlaylist || ""];
+    if (!tracks || tracks.length === 0) return;
+
+    const nextIndex = forward
+      ? (currentTrackIndex + 1) % tracks.length
+      : (currentTrackIndex - 1 + tracks.length) % tracks.length;
+
+    setCurrentTrackIndex(nextIndex);
+  };
+
+  const formatTime = (millis: number) => {
+    const minutes = Math.floor(millis / 60000);
+    const seconds = Math.floor((millis % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const handlePlaylistLongPress = (name: string) => {
+    setSelectedPlaylist(name);
+    setRenameInput(name);
+    setShowModal(true);
+  };
+
+  const handleRename = () => {
+    if (!renameInput.trim() || !selectedPlaylist) return;
+    const updatedPlaylists = { ...playlists };
+    const tracks = updatedPlaylists[selectedPlaylist];
+    delete updatedPlaylists[selectedPlaylist];
+    updatedPlaylists[renameInput.trim()] = tracks;
+
+    setPlaylists(updatedPlaylists);
+    if (currentPlaylist === selectedPlaylist) setCurrentPlaylist(renameInput.trim());
+    savePlaylists(updatedPlaylists);
+    setShowModal(false);
+  };
+
+  const handleDelete = () => {
+    if (!selectedPlaylist) return;
+    const updatedPlaylists = { ...playlists };
+    delete updatedPlaylists[selectedPlaylist];
+
+    if (currentPlaylist === selectedPlaylist) {
+      setCurrentPlaylist(null);
+      setCurrentTrackIndex(0);
     }
 
-    setIsPlaying((prev) => !prev);
+    setPlaylists(updatedPlaylists);
+    savePlaylists(updatedPlaylists);
+    setShowModal(false);
   };
 
-  const skipToNext = () => {
-    setCurrentTrackIndex((prev) => (prev + 1) % playlist.length);
+  const handleTrackLongPress = (index: number) => {
+    setRemoveTrackIndex(index);
+    setShowRemoveDialog(true);
   };
 
-  const skipToPrevious = () => {
-    setCurrentTrackIndex((prev) =>
-      (prev - 1 + playlist.length) % playlist.length
-    );
+  const confirmRemoveTrack = () => {
+    if (
+      removeTrackIndex === null ||
+      currentPlaylist === null ||
+      !playlists[currentPlaylist]
+    )
+      return;
+
+    const updatedPlaylist = [...playlists[currentPlaylist]];
+    updatedPlaylist.splice(removeTrackIndex, 1);
+    const updatedPlaylists = {
+      ...playlists,
+      [currentPlaylist]: updatedPlaylist,
+    };
+    setPlaylists(updatedPlaylists);
+    savePlaylists(updatedPlaylists);
+
+    if (removeTrackIndex === currentTrackIndex) {
+      setCurrentTrackIndex(0);
+      sound?.unloadAsync();
+      setSound(null);
+      setIsPlaying(false);
+    } else if (removeTrackIndex < currentTrackIndex) {
+      setCurrentTrackIndex(currentTrackIndex - 1);
+    }
+
+    setShowRemoveDialog(false);
+    setRemoveTrackIndex(null);
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.trackTitle}>{playlist[currentTrackIndex].title}</Text>
-  
-      {/* 🎵 Cover Art */}
-      <Image
-        source={{ uri: playlist[currentTrackIndex].cover }}
-        style={styles.coverArt}
-      />
-  
-      {/* 📝 Playlist Scroll */}
-      <FlatList
-        data={playlist}
-        horizontal
-        keyExtractor={(_, index) => index.toString()}
-        contentContainerStyle={styles.playlistScroller}
-        renderItem={({ item, index }) => (
-            <TouchableOpacity
-            style={[
-                styles.trackItem,
-                currentTrackIndex === index && styles.activeTrack,
-            ]}
-            onPress={() => setCurrentTrackIndex(index)}
-            >
-            <Image source={{ uri: item.cover }} style={styles.trackThumbnail} />
-            <Text style={styles.trackName} numberOfLines={1}>
-                {item.title}
-            </Text>
-            </TouchableOpacity>
-        )}
-        showsHorizontalScrollIndicator={false}
-        />
-
-  
-      {/* ▶️ Controls */}
-      <View style={styles.controls}>
-        <Ionicons name="play-skip-back" size={44} color="#888" onPress={skipToPrevious} />
-        <AnimatedPlayPauseButton isPlaying={isPlaying} onPress={togglePlayback} />
-        <Ionicons name="play-skip-forward" size={44} color="#888" onPress={skipToNext} />
-      </View>
+  const renderPlaylistSelector = () => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 16 }}>
+      {Object.keys(playlists).map((name) => (
+        <TouchableOpacity
+          key={name}
+          onPress={() => setCurrentPlaylist(name)}
+          onLongPress={() => handlePlaylistLongPress(name)}
+          style={[
+            styles.playlistButton,
+            currentPlaylist === name && { backgroundColor: "#333" },
+          ]}
+        >
+          <Text style={{ color: "#fff" }}>{name}</Text>
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity onPress={createPlaylist} style={styles.createButton}>
+        <Ionicons name="add" size={24} color="#fff" />
+        <Text style={{ color: "#fff" }}>New Playlist</Text>
+      </TouchableOpacity>
     </View>
   );
-  
-  
+
+  const currentTrack =
+    currentPlaylist && playlists[currentPlaylist]?.[currentTrackIndex];
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.title}>🎵 NeXs Player</Text>
+
+      {renderPlaylistSelector()}
+
+      {currentPlaylist && (
+        <>
+          <Text style={styles.trackTitle}>
+            {currentTrack?.name || "No track selected"}
+          </Text>
+
+          <Slider
+            style={{ width: "90%", height: 40 }}
+            minimumValue={0}
+            maximumValue={duration}
+            value={position}
+            onSlidingComplete={async (val) => {
+              if (sound) await sound.setPositionAsync(val);
+            }}
+            minimumTrackTintColor="#1DB954"
+            maximumTrackTintColor="#888"
+            thumbTintColor="#1DB954"
+          />
+          <Text style={{ color: "#ccc", marginBottom: 5 }}>
+            {formatTime(position)} / {formatTime(duration)}
+          </Text>
+
+          <View style={styles.controls}>
+            <TouchableOpacity onPress={() => skipTrack(false)}>
+              <Ionicons name="play-skip-back" size={32} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={togglePlayPause}>
+              <Ionicons
+                name={isPlaying ? "pause-circle" : "play-circle"}
+                size={64}
+                color="#1DB954"
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => skipTrack(true)}>
+              <Ionicons name="play-skip-forward" size={32} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={pickSong} style={styles.addButton}>
+            <Ionicons name="musical-notes" size={24} color="#fff" />
+            <Text style={{ color: "#fff", marginLeft: 6 }}>Add Song</Text>
+          </TouchableOpacity>
+
+          <FlatList
+            data={playlists[currentPlaylist]}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({ item, index }) => (
+              <TouchableOpacity
+                onPress={() => setCurrentTrackIndex(index)}
+                onLongPress={() => handleTrackLongPress(index)}
+                style={styles.trackItem}
+              >
+                <Text style={{ color: "#fff" }}>{item.name || `Track ${index + 1}`}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </>
+      )}
+
+      {/* Rename/Delete Modal */}
+      <Modal visible={showModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Playlist Options</Text>
+            <TextInput
+              value={renameInput}
+              onChangeText={setRenameInput}
+              style={styles.input}
+              placeholder="Rename Playlist"
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity onPress={handleRename} style={styles.modalButton}>
+              <Text style={styles.modalButtonText}>Rename</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleDelete}
+              style={[styles.modalButton, { backgroundColor: "#c0392b" }]}
+            >
+              <Text style={styles.modalButtonText}>Delete</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowModal(false)}
+              style={[styles.modalButton, { backgroundColor: "#444" }]}
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Remove Song Confirmation Modal */}
+      <Modal visible={showRemoveDialog} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Remove Song</Text>
+            <Text style={{ color: "#ddd", marginBottom: 20, textAlign: "center" }}>
+              Are you sure you want to remove this song from the playlist?
+            </Text>
+            <TouchableOpacity
+              onPress={confirmRemoveTrack}
+              style={[styles.modalButton, { backgroundColor: "#c0392b" }]}
+            >
+              <Text style={styles.modalButtonText}>Remove</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowRemoveDialog(false)}
+              style={[styles.modalButton, { backgroundColor: "#444" }]}
+            >
+              <Text style={styles.modalButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-  
-    trackTitle: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      marginBottom: 20,
-    },
-  
-    // 🎨 Album Art Style
-    coverArt: {
-      width: 250,
-      height: 250,
-      borderRadius: 16,
-      marginBottom: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
-      elevation: 8,
-    },
-  
-    // 🎵 Playlist Scroll (FlatList)
-    playlistScroller: {
-      paddingVertical: 10,
-      marginBottom: 20,
-    },
-  
-    trackItem: {
-      alignItems: 'center',
-      marginHorizontal: 10,
-    },
-  
-    trackThumbnail: {
-      width: 60,
-      height: 60,
-      borderRadius: 10,
-    },
-  
-    trackName: {
-      marginTop: 5,
-      fontSize: 12,
-      textAlign: 'center',
-      maxWidth: 70,
-      color: '#555',
-    },
-  
-    activeTrack: {
-      borderBottomWidth: 2,
-      borderColor: '#00bcd4',
-    },
-  
-    controls: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 30,
-    },
-  });
-  
-  
+  container: { flex: 1, alignItems: "center", backgroundColor: "#121212", padding: 20 },
+  title: { fontSize: 28, fontWeight: "bold", color: "#fff", marginBottom: 10 },
+  controls: { flexDirection: "row", alignItems: "center", marginTop: 20, gap: 30 },
+  trackTitle: { fontSize: 20, color: "#fff", marginTop: 20 },
+  playlistButton: {
+    backgroundColor: "#1DB954",
+    padding: 10,
+    borderRadius: 12,
+    margin: 5,
+  },
+  createButton: {
+    backgroundColor: "#555",
+    padding: 10,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    margin: 5,
+  },
+  addButton: {
+    backgroundColor: "#1DB954",
+    padding: 12,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  trackItem: {
+    padding: 10,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 8,
+    marginVertical: 4,
+    width: "100%",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.7)",
+  },
+  modalContainer: {
+    backgroundColor: "#222",
+    padding: 20,
+    borderRadius: 12,
+    width: "80%",
+    alignItems: "center",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  input: {
+    width: "100%",
+    backgroundColor: "#333",
+    padding: 10,
+    borderRadius: 8,
+    color: "#fff",
+    marginBottom: 10,
+  },
+  modalButton: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#1DB954",
+    marginVertical: 5,
+  },
+  modalButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#000", // or your dark background
+    paddingTop: Platform.OS === "android" ? 25 : 0, // extra padding for Android status bar
+  },  
+});
