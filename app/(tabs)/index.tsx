@@ -60,7 +60,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#E3F2FD" />
+      <StatusBar barStyle="light-content" backgroundColor="#121212" />
       <ScrollView contentContainerStyle={styles.container}>
         {/* Welcome Banner */}
         <MotiView
@@ -146,14 +146,21 @@ export default function DashboardScreen() {
           {upcomingTasks.length === 0 ? (
             <Text style={{ color: '#777', marginTop: 10 }}>No upcoming tasks.</Text>
           ) : (
-            upcomingTasks.map((task) => (
-              <View key={task.id} style={styles.summaryCard}>
+            upcomingTasks.map((task, index) => (
+              <View
+                key={task.id}
+                style={[
+                  styles.summaryCard,
+                  { marginBottom: index !== upcomingTasks.length - 1 ? 10 : 0 }, // 10px space except last item
+                ]}
+              >
                 <Text style={styles.summaryText}>📝 {task.text}</Text>
                 <Text style={styles.summaryText}>
                   📅 {task.date} | 🕒 {task.time}
                 </Text>
               </View>
             ))
+            
           )}
         </MotiView>
       </ScrollView>
@@ -165,16 +172,16 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#121212',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#121212',
     flexGrow: 1,
   },
   welcomeCard: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#1F1F1F',
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
@@ -182,11 +189,11 @@ const styles = StyleSheet.create({
   welcomeTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0D47A1',
+    color: '#FFFFFF',
   },
   welcomeSubtitle: {
     fontSize: 14,
-    color: '#333',
+    color: '#BBBBBB',
     marginTop: 8,
   },
   section: {
@@ -196,7 +203,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 10,
-    color: '#0D47A1',
+    color: '#eeeeee',
   },
   cardRow: {
     flexDirection: 'row',
@@ -204,7 +211,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   card: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#1F1F1F',
     padding: 15,
     borderRadius: 12,
     alignItems: 'center',
@@ -216,16 +223,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     fontWeight: '500',
-    color: '#333',
+    color: '#FFFFFF',
   },
   summaryCard: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#2C2C2C',
     padding: 15,
     borderRadius: 12,
   },
   summaryText: {
     fontSize: 14,
     marginBottom: 6,
-    color: '#333',
+    color: '#E0E0E0',
   },
 });
+

@@ -4,7 +4,18 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 
+// ✅ Global notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// ✅ Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -25,7 +36,8 @@ export default function RootLayout() {
   return (
     <>
       <Slot />
-      <StatusBar style="auto" />
+      <StatusBar style="light" backgroundColor="#121212" />
     </>
   );
+  
 }

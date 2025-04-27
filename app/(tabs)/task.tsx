@@ -15,7 +15,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Calendar } from 'react-native-calendars';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { scheduleNotification } from '../../utils/notificationHelper';
+import * as Notifications from 'expo-notifications';
 
 export default function TaskScreen() {
   const [task, setTask] = useState('');
@@ -27,7 +27,24 @@ export default function TaskScreen() {
 
   const TASKS_KEY = '@tasks';
 
+  // ✅ Notification handler
   useEffect(() => {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+
+    Notifications.requestPermissionsAsync().then((status) => {
+      if (status.granted) {
+        console.log('✅ Notification permission granted!');
+      } else {
+        console.log('🚫 Notification permission not granted!');
+      }
+    });
+
     loadTasks();
   }, []);
 
@@ -55,6 +72,16 @@ export default function TaskScreen() {
     }
   };
 
+  const scheduleNotification = async (title, body, dateTime) => {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+      },
+      trigger: dateTime,
+    });
+  };
+
   const handleAddTask = async () => {
     if (!task) {
       Alert.alert('Task Required', 'Please enter a task before adding.');
@@ -66,18 +93,18 @@ export default function TaskScreen() {
       return;
     }
 
-    const formattedTime = selectedTime.toTimeString().slice(0, 5); // "HH:mm"
+    const formattedTime = selectedTime.toTimeString().slice(0, 5);
     const dateTime = new Date(`${selectedDate}T${formattedTime}`);
+
+    if (dateTime <= new Date()) {
+      Alert.alert('Invalid Time', 'Please select a future time for the reminder.');
+      return;
+    }
 
     if (editingId) {
       const updated = tasks.map((item) =>
         item.id === editingId
-          ? {
-              ...item,
-              text: task,
-              date: selectedDate,
-              time: formattedTime,
-            }
+          ? { ...item, text: task, date: selectedDate, time: formattedTime }
           : item
       );
       setTasks(updated);
@@ -90,7 +117,8 @@ export default function TaskScreen() {
         time: formattedTime,
       };
       setTasks([...tasks, newTask]);
-      await scheduleNotification('Reminder', `Task: ${task}`, dateTime);
+
+      await scheduleNotification('⏰ Task Reminder', task, dateTime);
     }
 
     setTask('');
@@ -135,14 +163,24 @@ export default function TaskScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <Text style={styles.title}>Task & Reminder Manager</Text>
+
         <Calendar
           onDayPress={onDayPress}
           markedDates={{ [selectedDate]: { selected: true } }}
           theme={{
-            selectedDayBackgroundColor: '#2196F3',
-            todayTextColor: '#2196F3',
+            backgroundColor: '#121212',
+            calendarBackground: '#121212',
+            textSectionTitleColor: '#BBBBBB',
+            dayTextColor: '#FFFFFF',
+            todayTextColor: '#BB86FC',
+            selectedDayBackgroundColor: '#BB86FC',
+            selectedDayTextColor: '#000000',
+            monthTextColor: '#FFFFFF',
+            arrowColor: '#BB86FC',
+            textDisabledColor: '#444444',
           }}
         />
+
 
         <TextInput
           style={styles.input}
@@ -204,31 +242,31 @@ export default function TaskScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#121212',
     paddingTop: StatusBar.currentHeight || 0,
   },
   container: {
     padding: 20,
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#121212',
   },
   title: {
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 10,
-    color: '#0D47A1',
+    color: '#ffffff',
   },
   input: {
     borderWidth: 1,
     padding: 10,
     borderRadius: 6,
     marginVertical: 10,
-    borderColor: '#2196F3',
-    backgroundColor: '#e6f0ff',
-    color: '#000',
+    borderColor: '#BB86FC',
+    backgroundColor: '#1F1B24',
+    color: '#ffffff',
   },
   taskItem: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#1E1E1E',
     padding: 15,
     marginVertical: 5,
     borderRadius: 6,
@@ -236,19 +274,21 @@ const styles = StyleSheet.create({
   taskText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#ffffff',
   },
   timeButton: {
-    backgroundColor: '#ddd',
+    backgroundColor: '#2C2C2C',
     padding: 10,
     borderRadius: 6,
     marginBottom: 10,
   },
   timeText: {
     fontSize: 16,
+    color: '#ffffff',
   },
   timeInfo: {
     fontSize: 12,
-    color: '#555',
+    color: '#BBBBBB',
     marginTop: 5,
   },
   buttonsRow: {
@@ -257,12 +297,12 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   editButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#03DAC6',
     padding: 6,
     borderRadius: 4,
   },
   deleteButton: {
-    backgroundColor: '#F44336',
+    backgroundColor: '#CF6679',
     padding: 6,
     borderRadius: 4,
   },

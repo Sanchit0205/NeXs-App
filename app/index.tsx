@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { router } from 'expo-router';
 
+
 export default function SplashScreen() {
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -15,7 +16,7 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      {/* <Text style={styles.text}>Welcome to NeXs</Text> */}
+      <Text style={styles.text}>Welcome</Text>
     </View>
   );
 }
